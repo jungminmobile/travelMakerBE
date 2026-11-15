@@ -24,6 +24,9 @@ public class User {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
+    @Column(name = "firebase_uid", unique = true, length = 128)
+    private String firebaseUid;
+
     @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 
@@ -40,10 +43,16 @@ public class User {
     private Instant updatedAt;
 
     @Builder
-    private User(String email, String nickname, String profileImageUrl) {
+    private User(
+            String email,
+            String nickname,
+            String profileImageUrl,
+            String firebaseUid
+    ) {
         this.email = Objects.requireNonNull(email, "email must not be null");
         this.nickname = Objects.requireNonNull(nickname, "nickname must not be null");
         this.profileImageUrl = profileImageUrl;
+        this.firebaseUid = firebaseUid;
     }
 
     @PrePersist
