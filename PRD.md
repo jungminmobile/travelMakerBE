@@ -217,11 +217,14 @@ U0 공통 기반
 ## 6. 진행 체크리스트
 
 - [ ] U0 공통 기반
-- [ ] U1 인증·사용자 — 엔티티·Repository·테스트 완료 / [ ] API 5개
+- [ ] U1 인증·사용자 — [x] `users` 엔티티·Repository·테스트 완료 (PR #2) / [ ] API 5개
 - [ ] U2 취향 프로파일 — [ ] 엔티티 [ ] API 2개
 - [ ] U3 여행·참여자 — [ ] 엔티티 2개 [ ] API 7개
 - [ ] U4 1:1 초대 — [ ] 엔티티 [ ] API 6개
-- [ ] U5 장소 — [ ] 엔티티 [ ] API 1개
-- [ ] U6 일정 — [ ] 엔티티 3개 [ ] API 7개
+- [ ] U5 장소 — [x] `places` 엔티티·Repository·테스트 완료 (PR #8) / [ ] API 1개
+- [ ] U6 일정 — 엔티티 3개 중 2개 완료 / [ ] API 7개
+  - [x] `itineraries` 엔티티·Repository·테스트 완료 (PR #10)
+  - [x] `itinerary_days` 엔티티·Repository·테스트 완료 (feature/12, PR 머지 대기)
+  - [ ] `itinerary_items` 엔티티·Repository·테스트
 - [ ] U7 AI 일정 생성 — [ ] 엔티티 2개 [ ] API 3개 [ ] Stub 생성기 [ ] 실제 AI 연동
 - [ ] U8 통합 마무리
