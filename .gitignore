@@ -42,3 +42,6 @@ out/
 !.env.example
 /secrets/
 **/*firebase-adminsdk*.json
+
+### Local tools ###
+mise.toml
