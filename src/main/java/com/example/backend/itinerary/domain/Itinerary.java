@@ -52,6 +52,14 @@ public class Itinerary {
         this.generationJobId = generationJobId;
     }
 
+    public void rename(String title) {
+        this.title = Objects.requireNonNull(title, "title must not be null");
+    }
+
+    public void changeStatus(ItineraryStatus status) {
+        this.status = Objects.requireNonNull(status, "status must not be null");
+    }
+
     @PrePersist
     private void prePersist(){
         Instant now = Instant.now();
