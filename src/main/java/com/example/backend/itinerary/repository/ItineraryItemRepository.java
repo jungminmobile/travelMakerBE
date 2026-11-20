@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ItineraryItemRepository extends JpaRepository<ItineraryItem, UUID> {
@@ -23,4 +24,6 @@ public interface ItineraryItemRepository extends JpaRepository<ItineraryItem, UU
             order by d.dayNumber asc, i.displayOrder asc
             """)
     List<ItineraryItem> findAllByItineraryIdWithPlace(@Param("itineraryId") UUID itineraryId);
+
+    Optional<ItineraryItem> findByIdAndItineraryDay_Itinerary_TripId(UUID itemId, UUID tripId);
 }
