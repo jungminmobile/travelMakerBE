@@ -61,4 +61,18 @@ class UserRepositoryTest {
                         .nickname("nick2")
                         .build()));
     }
+
+    @Test
+    @DisplayName("이메일로 사용자를 조회할 수 있고, 없는 이메일이면 빈 Optional이다")
+    void findByEmail() {
+        User saved = userRepository.save(User.builder()
+                .email("find@a.com")
+                .nickname("nick")
+                .build());
+
+        assertThat(userRepository.findByEmail("find@a.com"))
+                .map(User::getId)
+                .contains(saved.getId());
+        assertThat(userRepository.findByEmail("none@a.com")).isEmpty();
+    }
 }
