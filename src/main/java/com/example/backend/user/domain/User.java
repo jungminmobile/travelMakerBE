@@ -64,6 +64,11 @@ public class User {
         this.updatedAt = now;
     }
 
+    public void updateProfile(String nickname, String profileImageUrl){
+        this.nickname = Objects.requireNonNull(nickname);
+        this.profileImageUrl = profileImageUrl;
+    }
+
     @PreUpdate
     private void preUpdate() {
         this.updatedAt = Instant.now();
