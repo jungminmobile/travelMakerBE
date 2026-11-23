@@ -2,9 +2,7 @@ package com.example.backend.trip.controller;
 
 import com.example.backend.auth.security.AuthenticatedUser;
 import com.example.backend.common.ApiResponse;
-import com.example.backend.trip.dto.CreateInvitationRequest;
-import com.example.backend.trip.dto.CreateInvitationResponse;
-import com.example.backend.trip.dto.InvitationResponse;
+import com.example.backend.trip.dto.*;
 import com.example.backend.trip.service.InvitationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -36,5 +34,21 @@ public class InvitationController {
             @AuthenticationPrincipal AuthenticatedUser currentUser
     ){
         return ApiResponse.ok(invitationService.getMyInvitations(currentUser.userId()));
+    }
+
+    @PostMapping("/invitations/{invitationId}/accept")
+    public ApiResponse<AcceptInvitationResponse> acceptInvitation(
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ){
+        return ApiResponse.ok(invitationService.acceptInvitation(invitationId,currentUser.userId()));
+    }
+
+    @PostMapping("/invitations/{invitationId}/reject")
+    public ApiResponse<RejectInvitationResponse> rejectInvitation(
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ){
+        return ApiResponse.ok(invitationService.rejectInvitation(invitationId,currentUser.userId()));
     }
 }

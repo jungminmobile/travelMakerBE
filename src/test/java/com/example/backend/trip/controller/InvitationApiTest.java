@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 초대 보내기(POST /trips/{tripId}/invitations), 내가 받은 초대 목록(GET /invitations/me) API 테스트.
+ * 초대 보내기, 받은 초대 목록, 초대 수락/거절 API 테스트.
  */
 @SpringBootTest
 class InvitationApiTest {
@@ -154,6 +154,15 @@ class InvitationApiTest {
 
     private ResultActions getMyInvitations(String authHeader) throws Exception {
         return mvc.perform(get("/api/v1/invitations/me").header("Authorization", authHeader));
+    }
+
+    private ResultActions respondToInvitation(UUID invitationId, String action, String authHeader) throws Exception {
+        return mvc.perform(post("/api/v1/invitations/" + invitationId + "/" + action)
+                .header("Authorization", authHeader));
+    }
+
+    private TripInvitation reload(TripInvitation invitation) {
+        return tripInvitationRepository.findById(invitation.getId()).orElseThrow();
     }
 
     private String userIdBody(UUID inviteeUserId) {
@@ -385,5 +394,228 @@ class InvitationApiTest {
     void getMyInvitationsWithoutLoginIs401() throws Exception {
         mvc.perform(get("/api/v1/invitations/me"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---------------------------------------------------------------- 초대 수락 (POST accept)
+
+    @Test
+    @DisplayName("수락: 200이고 초대가 ACCEPTED, 멤버가 ACTIVE로 등록되어 내 여행 목록에 나타난다")
+    void acceptInvitation() throws Exception {
+        TripInvitation invitation = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(invitation.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.trip_id").value(trip.getId().toString()))
+                .andExpect(jsonPath("$.data.role").value("MEMBER"));
+
+        TripInvitation saved = reload(invitation);
+        assertThat(saved.getStatus()).isEqualTo(TripInvitationStatus.ACCEPTED);
+        assertThat(saved.getRespondedAt()).isNotNull();
+
+        TripMember member = tripMemberRepository.findByTripIdAndUserId(trip.getId(), guest.getId()).orElseThrow();
+        assertThat(member.getRole()).isEqualTo(TripMemberRole.MEMBER);
+        assertThat(member.getStatus()).isEqualTo(TripMemberStatus.ACTIVE);
+        assertThat(member.getJoinedAt()).isNotNull();
+
+        // 수락한 여행이 바로 내 여행 목록에 나오고, 받은 초대 목록에서는 사라진다
+        mvc.perform(get("/api/v1/trips").header("Authorization", GUEST_AUTH_HEADER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].my_role").value("MEMBER"))
+                .andExpect(jsonPath("$.data[0].member_count").value(2));
+        getMyInvitations(GUEST_AUTH_HEADER)
+                .andExpect(jsonPath("$.data", hasSize(0)));
+    }
+
+    @Test
+    @DisplayName("수락: 이메일(대소문자 무시)로 받은 초대도 수락할 수 있고 멤버는 로그인 사용자 id로 등록된다")
+    void acceptInvitationReceivedByEmail() throws Exception {
+        TripInvitation invitation = saveInvitation(trip, null, GUEST_EMAIL.toUpperCase(),
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(invitation.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.trip_id").value(trip.getId().toString()));
+
+        assertThat(reload(invitation).getStatus()).isEqualTo(TripInvitationStatus.ACCEPTED);
+        assertThat(tripMemberRepository.existsByTripIdAndUserIdAndStatus(
+                trip.getId(), guest.getId(), TripMemberStatus.ACTIVE)).isTrue();
+    }
+
+    @Test
+    @DisplayName("수락: 여행을 나갔던(LEFT) 사용자는 새 행 없이 기존 행이 ACTIVE로 되살아난다")
+    void acceptInvitationRejoinsLeftMember() throws Exception {
+        saveMember(trip, guest.getId(), TripMemberRole.MEMBER, TripMemberStatus.LEFT);
+        TripInvitation invitation = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(invitation.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isOk());
+
+        assertThat(tripMemberRepository.findByTripIdAndUserId(trip.getId(), guest.getId()).orElseThrow().getStatus())
+                .isEqualTo(TripMemberStatus.ACTIVE);
+        // 소유자 1명 + 되살아난 1명 (중복 행 없음)
+        assertThat(tripMemberRepository.findAllByTripIdAndStatus(trip.getId(), TripMemberStatus.ACTIVE))
+                .hasSize(2);
+        assertThat(reload(invitation).getStatus()).isEqualTo(TripInvitationStatus.ACCEPTED);
+    }
+
+    @Test
+    @DisplayName("수락: 이미 ACTIVE 참여자면 409이고 초대는 PENDING으로 남는다")
+    void acceptInvitationWhenAlreadyActiveIs409() throws Exception {
+        saveMember(trip, guest.getId(), TripMemberRole.MEMBER, TripMemberStatus.ACTIVE);
+        TripInvitation invitation = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(invitation.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("HTTP_409"));
+
+        assertThat(reload(invitation).getStatus()).isEqualTo(TripInvitationStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("수락: 남에게 온 초대와 없는 초대는 똑같은 404이고 아무것도 바뀌지 않는다")
+    void acceptOthersOrUnknownInvitationIs404() throws Exception {
+        TripInvitation forSomeoneElse = saveInvitation(trip, UUID.randomUUID(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+        TripInvitation forOtherEmail = saveInvitation(trip, null, "other@example.com",
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(forSomeoneElse.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("HTTP_404"))
+                .andExpect(jsonPath("$.error.message").value("초대를 찾을 수 없습니다."));
+        respondToInvitation(forOtherEmail.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isNotFound());
+        // 존재하지 않는 초대도 같은 메시지 (초대 존재 여부를 알려 주지 않는다)
+        respondToInvitation(UUID.randomUUID(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.message").value("초대를 찾을 수 없습니다."));
+
+        assertThat(reload(forSomeoneElse).getStatus()).isEqualTo(TripInvitationStatus.PENDING);
+        assertThat(reload(forOtherEmail).getStatus()).isEqualTo(TripInvitationStatus.PENDING);
+        assertThat(tripMemberRepository.existsByTripIdAndUserIdAndStatus(
+                trip.getId(), guest.getId(), TripMemberStatus.ACTIVE)).isFalse();
+    }
+
+    @Test
+    @DisplayName("수락: 이미 처리됐거나 만료된 초대는 409이고 멤버가 생기지 않는다")
+    void acceptProcessedOrExpiredInvitationIs409() throws Exception {
+        TripInvitation rejected = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.REJECTED, daysFromNow(7));
+        TripInvitation canceled = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.CANCELED, daysFromNow(7));
+        TripInvitation expired = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(-1));
+
+        respondToInvitation(rejected.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.message").value("이미 처리된 초대입니다."));
+        respondToInvitation(canceled.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isConflict());
+        respondToInvitation(expired.getId(), "accept", GUEST_AUTH_HEADER)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.message").value("만료된 초대입니다."));
+
+        assertThat(tripMemberRepository.existsByTripIdAndUserIdAndStatus(
+                trip.getId(), guest.getId(), TripMemberStatus.ACTIVE)).isFalse();
+    }
+
+    @Test
+    @DisplayName("수락: 같은 초대를 두 번 수락하면 두 번째는 409")
+    void acceptTwiceIs409() throws Exception {
+        TripInvitation invitation = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(invitation.getId(), "accept", GUEST_AUTH_HEADER).andExpect(status().isOk());
+        respondToInvitation(invitation.getId(), "accept", GUEST_AUTH_HEADER).andExpect(status().isConflict());
+
+        assertThat(tripMemberRepository.findAllByTripIdAndStatus(trip.getId(), TripMemberStatus.ACTIVE))
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("수락: 로그인하지 않으면 401")
+    void acceptWithoutLoginIs401() throws Exception {
+        TripInvitation invitation = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        mvc.perform(post("/api/v1/invitations/" + invitation.getId() + "/accept"))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(reload(invitation).getStatus()).isEqualTo(TripInvitationStatus.PENDING);
+    }
+
+    // ---------------------------------------------------------------- 초대 거절 (POST reject)
+
+    @Test
+    @DisplayName("거절: 200이고 초대가 REJECTED, 멤버는 생기지 않고 받은 초대 목록에서 사라진다")
+    void rejectInvitation() throws Exception {
+        TripInvitation invitation = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(invitation.getId(), "reject", GUEST_AUTH_HEADER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.invitation_id").value(invitation.getId().toString()))
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+        TripInvitation saved = reload(invitation);
+        assertThat(saved.getStatus()).isEqualTo(TripInvitationStatus.REJECTED);
+        assertThat(saved.getRespondedAt()).isNotNull();
+        assertThat(tripMemberRepository.findByTripIdAndUserId(trip.getId(), guest.getId())).isEmpty();
+        getMyInvitations(GUEST_AUTH_HEADER)
+                .andExpect(jsonPath("$.data", hasSize(0)));
+    }
+
+    @Test
+    @DisplayName("거절: 이메일로 받은 초대도 거절할 수 있다")
+    void rejectInvitationReceivedByEmail() throws Exception {
+        TripInvitation invitation = saveInvitation(trip, null, GUEST_EMAIL,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        respondToInvitation(invitation.getId(), "reject", GUEST_AUTH_HEADER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+        assertThat(reload(invitation).getStatus()).isEqualTo(TripInvitationStatus.REJECTED);
+    }
+
+    @Test
+    @DisplayName("거절: 남에게 온 초대나 없는 초대는 404, 이미 처리됐거나 만료된 초대는 409")
+    void rejectInvalidInvitation() throws Exception {
+        TripInvitation forSomeoneElse = saveInvitation(trip, UUID.randomUUID(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+        TripInvitation accepted = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.ACCEPTED, daysFromNow(7));
+        TripInvitation expired = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(-1));
+
+        respondToInvitation(forSomeoneElse.getId(), "reject", GUEST_AUTH_HEADER)
+                .andExpect(status().isNotFound());
+        respondToInvitation(UUID.randomUUID(), "reject", GUEST_AUTH_HEADER)
+                .andExpect(status().isNotFound());
+        respondToInvitation(accepted.getId(), "reject", GUEST_AUTH_HEADER)
+                .andExpect(status().isConflict());
+        respondToInvitation(expired.getId(), "reject", GUEST_AUTH_HEADER)
+                .andExpect(status().isConflict());
+
+        assertThat(reload(forSomeoneElse).getStatus()).isEqualTo(TripInvitationStatus.PENDING);
+        assertThat(reload(accepted).getStatus()).isEqualTo(TripInvitationStatus.ACCEPTED);
+    }
+
+    @Test
+    @DisplayName("거절: 로그인하지 않으면 401")
+    void rejectWithoutLoginIs401() throws Exception {
+        TripInvitation invitation = saveInvitation(trip, guest.getId(), null,
+                TripInvitationStatus.PENDING, daysFromNow(7));
+
+        mvc.perform(post("/api/v1/invitations/" + invitation.getId() + "/reject"))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(reload(invitation).getStatus()).isEqualTo(TripInvitationStatus.PENDING);
     }
 }
