@@ -75,4 +75,19 @@ class UserRepositoryTest {
                 .contains(saved.getId());
         assertThat(userRepository.findByEmail("none@a.com")).isEmpty();
     }
+
+    @Test
+    @DisplayName("이메일로 사용자를 대소문자 구분 없이 조회할 수 있다")
+    void findByEmailIgnoreCase() {
+        User saved = userRepository.save(User.builder()
+                .email("Mixed.Case@a.com")
+                .nickname("nick")
+                .build());
+
+        assertThat(userRepository.findByEmailIgnoreCase("mixed.case@a.com"))
+                .map(User::getId)
+                .contains(saved.getId());
+        assertThat(userRepository.findByEmailIgnoreCase("MIXED.CASE@A.COM")).isPresent();
+        assertThat(userRepository.findByEmailIgnoreCase("none@a.com")).isEmpty();
+    }
 }
