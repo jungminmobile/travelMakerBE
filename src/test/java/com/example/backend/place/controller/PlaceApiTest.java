@@ -149,6 +149,10 @@ class PlaceApiTest {
     void missingKeywordIs400() throws Exception {
         mvc.perform(get("/api/v1/places/search")
                         .header("Authorization", AUTH_HEADER))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("필수 요청 파라미터 'keyword'가 누락되었습니다."));
     }
 }

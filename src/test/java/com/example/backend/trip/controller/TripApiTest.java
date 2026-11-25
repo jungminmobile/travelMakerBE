@@ -214,6 +214,17 @@ class TripApiTest {
     }
 
     @Test
+    @DisplayName("여행 생성: 깨진 JSON을 보내면 본문 형식 오류를 안내한다")
+    void createTripWithMalformedJsonIs400() throws Exception {
+        postTrip("{")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("요청 본문의 JSON 형식과 값의 타입을 확인해 주세요."));
+    }
+
+    @Test
     @DisplayName("생성: 로그인하지 않으면 401이고 저장되지 않는다")
     void createTripWithoutLoginIs401() throws Exception {
         mvc.perform(post(BASE)

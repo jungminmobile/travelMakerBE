@@ -53,11 +53,24 @@ class AuthApiTest {
 
     @Test
     void missingBodyTokenIs400() throws Exception {
-        mvc.perform(post("/api/v1/auth/google").contentType("application/json").content("{}"))
-                .andExpect(status().isBadRequest());
-        mvc.perform(login(" ")).andExpect(status().isBadRequest());
-        mvc.perform(post("/api/v1/auth/google").contentType("application/json").content("{"))
-                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/auth/google")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message").value("id_token을 입력해 주세요."));
+
+        mvc.perform(login(" "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message").value("id_token을 입력해 주세요."));
+
+        mvc.perform(post("/api/v1/auth/google")
+                        .contentType("application/json")
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value("요청 본문의 JSON 형식과 값의 타입을 확인해 주세요."));
     }
 
     @Test

@@ -9,13 +9,37 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
-    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
-    public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception exception) {
-        return ResponseEntity.badRequest().body(ApiResponse.fail(
-                "INVALID_REQUEST", "id_token을 포함한 올바른 JSON 요청이 필요합니다."));
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleValidation(
+            MethodArgumentNotValidException exception) {
+        var fieldError = exception.getBindingResult().getFieldError();
+
+        if (fieldError == null || fieldError.getDefaultMessage() == null) {
+            return badRequest("요청 필드의 값을 확인해 주세요.");
+        }
+
+        return badRequest(fieldError.getDefaultMessage());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableBody() {
+        return badRequest("요청 본문의 JSON 형식과 값의 타입을 확인해 주세요.");
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParameter(
+            MissingServletRequestParameterException exception) {
+        String name = exception.getParameterName();
+        return badRequest("필수 요청 파라미터 '" + name + "'가 누락되었습니다.");
+    }
+
+    private ResponseEntity<ApiResponse<Void>> badRequest(String message) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.fail("INVALID_REQUEST", message));
     }
 
     @ExceptionHandler(AuthenticationException.class)
