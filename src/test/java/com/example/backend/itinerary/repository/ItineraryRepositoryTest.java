@@ -126,4 +126,52 @@ class ItineraryRepositoryTest {
 
         assertThat(active).isEmpty();
     }
+
+    @Test
+    @DisplayName("여행별 최대 버전을 조회하며 일정이 없으면 0을 반환한다")
+    void findMaxVersionByTripId() {
+        UUID tripId = UUID.randomUUID();
+        assertThat(itineraryRepository.findMaxVersionByTripId(tripId)).isZero();
+
+        itineraryRepository.save(createItinerary(tripId, 1, ItineraryStatus.ARCHIVED));
+        itineraryRepository.save(createItinerary(tripId, 4, ItineraryStatus.DRAFT));
+        itineraryRepository.save(createItinerary(UUID.randomUUID(), 10, ItineraryStatus.DRAFT));
+
+        assertThat(itineraryRepository.findMaxVersionByTripId(tripId)).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("generationJobId 단건 및 일괄 조회가 동작한다")
+    void findByGenerationJobId() {
+        UUID tripId = UUID.randomUUID();
+        UUID job1 = UUID.randomUUID();
+        UUID job2 = UUID.randomUUID();
+
+        Itinerary first = itineraryRepository.saveAndFlush(Itinerary.builder()
+                .tripId(tripId)
+                .version(1)
+                .title("AI 일정 v1")
+                .status(ItineraryStatus.DRAFT)
+                .generationJobId(job1)
+                .createdBy(UUID.randomUUID())
+                .build());
+        Itinerary second = itineraryRepository.saveAndFlush(Itinerary.builder()
+                .tripId(tripId)
+                .version(2)
+                .title("AI 일정 v2")
+                .status(ItineraryStatus.DRAFT)
+                .generationJobId(job2)
+                .createdBy(UUID.randomUUID())
+                .build());
+
+        assertThat(itineraryRepository.findByGenerationJobId(job1))
+                .isPresent()
+                .get()
+                .extracting(Itinerary::getId)
+                .isEqualTo(first.getId());
+
+        assertThat(itineraryRepository.findAllByGenerationJobIdIn(List.of(job1, job2)))
+                .extracting(Itinerary::getId)
+                .containsExactlyInAnyOrder(first.getId(), second.getId());
+    }
 }
