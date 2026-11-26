@@ -3,6 +3,7 @@ package com.example.backend.trip.controller;
 import com.example.backend.auth.security.AuthenticatedUser;
 import com.example.backend.common.ApiResponse;
 import com.example.backend.trip.dto.*;
+import com.example.backend.trip.service.TripMemberService;
 import com.example.backend.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import java.util.UUID;
 
 public class TripController {
     private final TripService tripService;
+    private final TripMemberService tripMemberService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<CreateTripResponse>> createTrip(
@@ -42,5 +44,22 @@ public class TripController {
             @AuthenticationPrincipal AuthenticatedUser currentUser
             ){
         return ApiResponse.ok(tripService.updateTrip(tripId,currentUser.userId(),request));
+    }
+
+    @DeleteMapping("/{tripId}/members/me")
+    public ApiResponse<TripMemberResponse> leaveTrip(
+            @PathVariable UUID tripId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ){
+        return ApiResponse.ok(tripMemberService.leaveTrip(tripId,currentUser.userId()));
+    }
+
+    @DeleteMapping("/{tripId}/members/{userId}")
+    public ApiResponse<TripMemberResponse> removeMember(
+            @PathVariable UUID tripId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable("userId") UUID targetUserId
+    ){
+        return ApiResponse.ok(tripMemberService.removeMember(tripId,currentUser.userId(),targetUserId));
     }
 }
