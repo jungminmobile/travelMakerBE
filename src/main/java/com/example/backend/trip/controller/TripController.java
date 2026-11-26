@@ -62,4 +62,12 @@ public class TripController {
     ){
         return ApiResponse.ok(tripMemberService.removeMember(tripId,currentUser.userId(),targetUserId));
     }
+
+    @GetMapping("/{tripId}")
+    public ApiResponse<TripDetailResponse> getTripDetail(
+            @PathVariable UUID tripId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ){
+        return ApiResponse.ok(tripService.getTripDetail(tripId,currentUser.userId()));
+    }
 }
