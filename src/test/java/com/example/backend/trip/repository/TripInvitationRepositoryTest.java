@@ -164,4 +164,31 @@ class TripInvitationRepositoryTest {
                 assertThat(Hibernate.isInitialized(invitation.getTrip())).isTrue());
         assertThat(result.get(0).getTrip().getTitle()).isEqualTo("나중에 받은 초대 여행");
     }
+
+    @Test
+    @DisplayName("여행별 초대 목록: 상태와 상관없이 해당 여행의 초대만 최신순으로 나온다")
+    void findAllByTripIdOrderByCreatedAtDesc() throws InterruptedException {
+        UUID ownerId = UUID.randomUUID();
+        Instant future = Instant.now().plus(7, ChronoUnit.DAYS);
+        Trip trip = saveTrip(ownerId, "목록 대상 여행");
+        Trip other = saveTrip(ownerId, "다른 여행");
+
+        TripInvitation first = saveInvitation(trip, ownerId, UUID.randomUUID(), null,
+                TripInvitationStatus.PENDING, future);
+        Thread.sleep(10);
+        TripInvitation second = saveInvitation(trip, ownerId, null, "a@example.com",
+                TripInvitationStatus.ACCEPTED, future);
+        Thread.sleep(10);
+        TripInvitation third = saveInvitation(trip, ownerId, UUID.randomUUID(), null,
+                TripInvitationStatus.CANCELED, future);
+        saveInvitation(other, ownerId, UUID.randomUUID(), null, TripInvitationStatus.PENDING, future);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(tripInvitationRepository.findAllByTripIdOrderByCreatedAtDesc(trip.getId()))
+                .extracting(TripInvitation::getId)
+                .containsExactly(third.getId(), second.getId(), first.getId());
+        assertThat(tripInvitationRepository.findAllByTripIdOrderByCreatedAtDesc(UUID.randomUUID())).isEmpty();
+    }
 }

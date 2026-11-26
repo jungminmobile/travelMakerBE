@@ -88,7 +88,6 @@ public class InvitationService {
         return CreateInvitationResponse.from(saved);
     }
 
-
     private TripInvitation findMyPendingInvitation(UUID invitationId, UUID userId){
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
@@ -148,6 +147,35 @@ public class InvitationService {
         tripInvitation.accept(Instant.now());
 
         return AcceptInvitationResponse.from(tripInvitation);
+    }
+
+    public List<SentInvitationResponse> getSentInvitations(UUID tripId, UUID userId){
+        if(!tripMemberRepository.existsByTripIdAndUserIdAndStatus(tripId,userId,TripMemberStatus.ACTIVE)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 여행의 멤버가 아닙니다.");
+        }
+        return tripInvitationRepository.findAllByTripIdOrderByCreatedAtDesc(tripId)
+                .stream().map(SentInvitationResponse::from).toList();
+    }
+
+    @Transactional
+    public CancelInvitationResponse cancelInvitation(UUID tripId, UUID userId, UUID invitationId) {
+        if(!tripMemberRepository.existsByTripIdAndUserIdAndStatus(tripId,userId,TripMemberStatus.ACTIVE)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 여행의 멤버가 아닙니다.");
+        }
+
+        TripInvitation tripInvitation = tripInvitationRepository.findById(invitationId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, INVITATION_NOT_FOUND));
+
+        if(!tripInvitation.getTrip().getId().equals(tripId)){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, INVITATION_NOT_FOUND);
+        }
+
+        if(tripInvitation.getStatus() != TripInvitationStatus.PENDING){
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 처리된 초대입니다.");
+        }
+
+        tripInvitation.cancel(Instant.now());
+        return CancelInvitationResponse.from(tripInvitation);
     }
 
 }

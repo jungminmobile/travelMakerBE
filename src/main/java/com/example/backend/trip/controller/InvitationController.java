@@ -51,4 +51,21 @@ public class InvitationController {
     ){
         return ApiResponse.ok(invitationService.rejectInvitation(invitationId,currentUser.userId()));
     }
+
+    @GetMapping("/trips/{tripId}/invitations")
+    public ApiResponse<List<SentInvitationResponse>> getTripInvitations(
+            @PathVariable UUID tripId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ){
+        return ApiResponse.ok(invitationService.getSentInvitations(tripId, currentUser.userId()));
+    }
+
+    @DeleteMapping("/trips/{tripId}/invitations/{invitationId}")
+    public ApiResponse<CancelInvitationResponse> cancelInvitation(
+            @PathVariable UUID tripId,
+            @PathVariable UUID invitationId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ){
+        return ApiResponse.ok(invitationService.cancelInvitation(tripId,currentUser.userId(),invitationId));
+    }
 }

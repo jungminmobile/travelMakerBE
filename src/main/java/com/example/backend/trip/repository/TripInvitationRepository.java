@@ -21,6 +21,8 @@ public interface TripInvitationRepository extends JpaRepository<TripInvitation, 
 
     List<TripInvitation> findAllByInviteeEmailAndStatus(String inviteeEmail, TripInvitationStatus status);
 
+    List<TripInvitation> findAllByTripIdOrderByCreatedAtDesc(UUID tripId);
+
     boolean existsByTripIdAndInviteeUserIdAndStatus(
             UUID tripId,
             UUID inviteeUserId,
