@@ -2,9 +2,7 @@ package com.example.backend.trip.controller;
 
 import com.example.backend.auth.security.AuthenticatedUser;
 import com.example.backend.common.ApiResponse;
-import com.example.backend.trip.dto.CreateTripRequest;
-import com.example.backend.trip.dto.CreateTripResponse;
-import com.example.backend.trip.dto.TripSummaryResponse;
+import com.example.backend.trip.dto.*;
 import com.example.backend.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -13,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -35,5 +34,13 @@ public class TripController {
        @AuthenticationPrincipal AuthenticatedUser currentUser
     ){
         return ApiResponse.ok(tripService.getMyTrips(currentUser.userId()));
+    }
+
+    @PatchMapping("/{tripId}")
+    public ApiResponse<UpdateTripResponse> updateTrip(
+            @PathVariable UUID tripId, @RequestBody UpdateTripRequest request,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+            ){
+        return ApiResponse.ok(tripService.updateTrip(tripId,currentUser.userId(),request));
     }
 }
