@@ -7,6 +7,25 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public record CreateGenerationJobRequest(
         @JsonProperty("special_requests") String specialRequests,
-        @JsonProperty("include_budget_optimization") Boolean includeBudgetOptimization
+        @JsonProperty("include_budget_optimization") Boolean includeBudgetOptimization,
+        String destination,
+        Conditions conditions,
+        Options options
 ) {
+    public CreateGenerationJobRequest(String specialRequests, Boolean includeBudgetOptimization) {
+        this(specialRequests, includeBudgetOptimization, null, null, null);
+    }
+
+    public record Conditions(
+            String companion,
+            String transport,
+            String budget,
+            String tempo
+    ) {
+    }
+
+    public record Options(
+            @JsonProperty("max_separate_blocks_per_day") Integer maxSeparateBlocksPerDay
+    ) {
+    }
 }

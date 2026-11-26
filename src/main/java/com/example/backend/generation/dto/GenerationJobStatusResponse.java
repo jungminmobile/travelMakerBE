@@ -18,6 +18,8 @@ public record GenerationJobStatusResponse(
         @JsonProperty("progress_percent") Integer progressPercent,
         @JsonProperty("itinerary_id") UUID itineraryId,
         @JsonProperty("error_message") String errorMessage,
+        @JsonProperty("error_code") String errorCode,
+        Boolean retryable,
         @JsonProperty("started_at") Instant startedAt,
         @JsonProperty("completed_at") Instant completedAt,
         @JsonProperty("created_at") Instant createdAt
@@ -32,12 +34,16 @@ public record GenerationJobStatusResponse(
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     job.getCreatedAt()
             );
             case RUNNING -> new GenerationJobStatusResponse(
                     job.getId(),
                     job.getStatus(),
                     job.getProgressPercent(),
+                    null,
+                    null,
                     null,
                     null,
                     job.getStartedAt(),
@@ -51,6 +57,8 @@ public record GenerationJobStatusResponse(
                     itineraryId,
                     null,
                     null,
+                    null,
+                    null,
                     job.getCompletedAt(),
                     null
             );
@@ -60,6 +68,8 @@ public record GenerationJobStatusResponse(
                     job.getProgressPercent(),
                     null,
                     job.getErrorMessage(),
+                    job.getErrorCode(),
+                    job.getRetryable(),
                     null,
                     job.getCompletedAt(),
                     null

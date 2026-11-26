@@ -1,10 +1,13 @@
 package com.example.backend.generation.service;
 
+import com.example.backend.generation.client.AiServerException;
 import com.example.backend.generation.domain.GenerationJob;
 import com.example.backend.generation.domain.GenerationJobStatus;
 import com.example.backend.generation.dto.GeneratedItineraryPlan;
 import com.example.backend.generation.dto.GeneratedItineraryPlan.GeneratedDay;
 import com.example.backend.generation.dto.GeneratedItineraryPlan.GeneratedItem;
+import com.example.backend.generation.dto.GeneratedItineraryPlan.GeneratedPlace;
+import com.example.backend.generation.dto.GeneratedItineraryPlan.GeneratedSeparateOption;
 import com.example.backend.generation.event.GenerationJobCreatedEvent;
 import com.example.backend.generation.generator.GenerationContext;
 import com.example.backend.generation.generator.ItineraryGenerator;
@@ -29,6 +32,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +50,8 @@ public class GenerationJobWorker {
     private static final int MAX_ITINERARY_TITLE_LENGTH = 100;
     private static final int MAX_DAY_TITLE_LENGTH = 100;
     private static final int MAX_ITEM_TITLE_LENGTH = 255;
+    private static final int MAX_PLACE_NAME_LENGTH = 255;
+    private static final int MAX_PLACE_CATEGORY_LENGTH = 100;
 
     private final GenerationJobRepository generationJobRepository;
     private final TripRepository tripRepository;
@@ -124,7 +131,9 @@ public class GenerationJobWorker {
                 .createdBy(job.getRequestedBy())
                 .build());
 
+        Map<String, Place> placeCacheByExternalId = new HashMap<>();
         int totalItems = 0;
+
         for (GeneratedDay dayPlan : plan.days()) {
             ItineraryDay day = itineraryDayRepository.save(ItineraryDay.builder()
                     .itinerary(itinerary)
@@ -137,9 +146,12 @@ public class GenerationJobWorker {
                 continue;
             }
             for (GeneratedItem itemPlan : dayPlan.items()) {
-                Place place = (itemPlan.placeId() == null)
-                        ? null
-                        : placeRepository.findById(itemPlan.placeId()).orElse(null);
+                Place place = resolveOrCreatePlace(
+                        itemPlan.placeId(),
+                        itemPlan.generatedPlace(),
+                        placeCacheByExternalId
+                );
+                Map<String, Object> aiMetadata = buildItemAiMetadata(itemPlan, placeCacheByExternalId);
 
                 itineraryItemRepository.save(ItineraryItem.builder()
                         .itineraryDay(day)
@@ -151,6 +163,8 @@ public class GenerationJobWorker {
                         .displayOrder(itemPlan.displayOrder())
                         .estimatedCost(itemPlan.estimatedCost())
                         .recommendationReason(itemPlan.recommendationReason())
+                        .mode(itemPlan.mode())
+                        .aiMetadata(aiMetadata)
                         .build());
                 totalItems++;
             }
@@ -163,13 +177,110 @@ public class GenerationJobWorker {
         resultData.put("generator", plan.generatorName());
         resultData.put("day_count", plan.days().size());
         resultData.put("item_count", totalItems);
+        if (plan.metadata() != null && !plan.metadata().isEmpty()) {
+            resultData.put("ai_metadata", plan.metadata());
+        }
 
         job.complete(resultData, Instant.now());
     }
 
+    private Place resolveOrCreatePlace(
+            UUID placeId,
+            GeneratedPlace generatedPlace,
+            Map<String, Place> placeCacheByExternalId
+    ) {
+        if (placeId != null) {
+            return placeRepository.findById(placeId).orElse(null);
+        }
+        if (generatedPlace == null
+                || generatedPlace.name() == null
+                || generatedPlace.name().isBlank()
+                || generatedPlace.latitude() == null
+                || generatedPlace.longitude() == null) {
+            return null;
+        }
+        double lat = generatedPlace.latitude();
+        double lng = generatedPlace.longitude();
+        if (lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0) {
+            return null;
+        }
+
+        String externalId = generatedPlace.externalPlaceId();
+        if (externalId != null && !externalId.isBlank()) {
+            Place cached = placeCacheByExternalId.get(externalId);
+            if (cached != null) {
+                return cached;
+            }
+            Place existing = placeRepository.findByExternalPlaceId(externalId).orElse(null);
+            if (existing != null) {
+                placeCacheByExternalId.put(externalId, existing);
+                return existing;
+            }
+        }
+
+        Place saved = placeRepository.saveAndFlush(Place.builder()
+                .externalPlaceId(externalId)
+                .name(clamp(generatedPlace.name().trim(), MAX_PLACE_NAME_LENGTH))
+                .latitude(lat)
+                .longitude(lng)
+                .category(clamp(generatedPlace.category(), MAX_PLACE_CATEGORY_LENGTH))
+                .build());
+
+        if (externalId != null && !externalId.isBlank()) {
+            placeCacheByExternalId.put(externalId, saved);
+        }
+        return saved;
+    }
+
+    private Map<String, Object> buildItemAiMetadata(
+            GeneratedItem itemPlan,
+            Map<String, Place> placeCacheByExternalId
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+
+        if (itemPlan.pickedBy() != null && !itemPlan.pickedBy().isEmpty()) {
+            metadata.put("picked_by", List.copyOf(itemPlan.pickedBy()));
+        }
+
+        if (itemPlan.separateOptions() != null && !itemPlan.separateOptions().isEmpty()) {
+            List<Map<String, Object>> separateList = new ArrayList<>(itemPlan.separateOptions().size());
+            for (GeneratedSeparateOption option : itemPlan.separateOptions()) {
+                Map<String, Object> branchMap = new LinkedHashMap<>();
+                branchMap.put("participant_ids",
+                        option.participantIds() != null ? List.copyOf(option.participantIds()) : List.of());
+                branchMap.put("title", option.title());
+                branchMap.put("description", option.description());
+                branchMap.put("recommendation_reason", option.recommendationReason());
+
+                Place branchPlace = resolveOrCreatePlace(null, option.place(), placeCacheByExternalId);
+                if (branchPlace != null) {
+                    Map<String, Object> placeMap = new LinkedHashMap<>();
+                    placeMap.put("id", branchPlace.getId().toString());
+                    if (branchPlace.getExternalPlaceId() != null) {
+                        placeMap.put("external_place_id", branchPlace.getExternalPlaceId());
+                    }
+                    placeMap.put("name", branchPlace.getName());
+                    placeMap.put("latitude", branchPlace.getLatitude());
+                    placeMap.put("longitude", branchPlace.getLongitude());
+                    placeMap.put("category", branchPlace.getCategory());
+                    branchMap.put("place", placeMap);
+                }
+                separateList.add(branchMap);
+            }
+            metadata.put("separate", separateList);
+        }
+
+        return metadata.isEmpty() ? null : metadata;
+    }
+
     private void markJobFailed(UUID jobId, Exception ex) {
-        generationJobRepository.findById(jobId)
-                .ifPresent(job -> job.fail(resolveErrorMessage(ex), Instant.now()));
+        generationJobRepository.findById(jobId).ifPresent(job -> {
+            if (ex instanceof AiServerException aiEx) {
+                job.fail(resolveErrorMessage(aiEx), aiEx.getErrorCode(), aiEx.isRetryable(), Instant.now());
+            } else {
+                job.fail(resolveErrorMessage(ex), null, false, Instant.now());
+            }
+        });
     }
 
     @SuppressWarnings("unchecked")
@@ -194,6 +305,25 @@ public class GenerationJobWorker {
 
         String specialRequests = inputData.get("special_requests") instanceof String s ? s : null;
         boolean includeBudgetOptimization = Boolean.TRUE.equals(inputData.get("include_budget_optimization"));
+        String countryDestination = inputData.get("country_destination") instanceof String s ? s : null;
+
+        GenerationContext.Conditions conditions = null;
+        Object rawConditions = inputData.get("conditions");
+        if (rawConditions instanceof Map<?, ?> condMap) {
+            conditions = new GenerationContext.Conditions(
+                    condMap.get("companion") instanceof String s ? s : null,
+                    condMap.get("transport") instanceof String s ? s : null,
+                    condMap.get("budget") instanceof String s ? s : null,
+                    condMap.get("tempo") instanceof String s ? s : null
+            );
+        }
+
+        Integer maxSeparateBlocksPerDay = null;
+        Object rawOptions = inputData.get("options");
+        if (rawOptions instanceof Map<?, ?> optMap
+                && optMap.get("max_separate_blocks_per_day") instanceof Number n) {
+            maxSeparateBlocksPerDay = n.intValue();
+        }
 
         return new GenerationContext(
                 trip.getId(),
@@ -206,7 +336,10 @@ public class GenerationJobWorker {
                 memberUserIds,
                 memberSnapshots,
                 specialRequests,
-                includeBudgetOptimization
+                includeBudgetOptimization,
+                countryDestination,
+                conditions,
+                maxSeparateBlocksPerDay
         );
     }
 

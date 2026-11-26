@@ -19,6 +19,47 @@ public record GenerationContext(
         List<UUID> memberUserIds,
         List<Map<String, Object>> memberSnapshots,
         String specialRequests,
-        boolean includeBudgetOptimization
+        boolean includeBudgetOptimization,
+        String countryDestination,
+        Conditions conditions,
+        Integer maxSeparateBlocksPerDay
 ) {
+    public GenerationContext(
+            UUID tripId,
+            String tripTitle,
+            String destination,
+            LocalDate startDate,
+            LocalDate endDate,
+            Long budget,
+            String currency,
+            List<UUID> memberUserIds,
+            List<Map<String, Object>> memberSnapshots,
+            String specialRequests,
+            boolean includeBudgetOptimization
+    ) {
+        this(
+                tripId,
+                tripTitle,
+                destination,
+                startDate,
+                endDate,
+                budget,
+                currency,
+                memberUserIds,
+                memberSnapshots,
+                specialRequests,
+                includeBudgetOptimization,
+                null,
+                null,
+                null
+        );
+    }
+
+    public record Conditions(
+            String companion,
+            String transport,
+            String budget,
+            String tempo
+    ) {
+    }
 }

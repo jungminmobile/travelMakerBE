@@ -18,6 +18,8 @@ public record GenerationJobSummaryResponse(
         @JsonProperty("progress_percent") Integer progressPercent,
         @JsonProperty("itinerary_id") UUID itineraryId,
         @JsonProperty("error_message") String errorMessage,
+        @JsonProperty("error_code") String errorCode,
+        Boolean retryable,
         @JsonProperty("created_at") Instant createdAt,
         @JsonProperty("started_at") Instant startedAt,
         @JsonProperty("completed_at") Instant completedAt
@@ -29,6 +31,8 @@ public record GenerationJobSummaryResponse(
                 job.getProgressPercent(),
                 itineraryId,
                 job.getErrorMessage(),
+                job.getErrorCode(),
+                job.getRetryable(),
                 job.getCreatedAt(),
                 job.getStartedAt(),
                 job.getCompletedAt()

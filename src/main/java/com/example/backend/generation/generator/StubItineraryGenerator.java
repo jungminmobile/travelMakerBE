@@ -3,6 +3,7 @@ package com.example.backend.generation.generator;
 import com.example.backend.generation.dto.GeneratedItineraryPlan;
 import com.example.backend.generation.dto.GeneratedItineraryPlan.GeneratedDay;
 import com.example.backend.generation.dto.GeneratedItineraryPlan.GeneratedItem;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -14,6 +15,7 @@ import java.util.List;
  * 실제 LLM 연동 전 파이프라인 검증용 Stub 일정 생성기.
  */
 @Component
+@ConditionalOnProperty(name = "app.ai.generator", havingValue = "stub")
 public class StubItineraryGenerator implements ItineraryGenerator {
 
     private static final String GENERATOR_NAME = "stub-itinerary-generator-v1";

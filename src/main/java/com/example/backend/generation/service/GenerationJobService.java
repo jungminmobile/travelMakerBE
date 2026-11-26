@@ -39,6 +39,9 @@ public class GenerationJobService {
 
     private static final int ESTIMATED_SECONDS = 15;
     private static final int MAX_SPECIAL_REQUESTS_LENGTH = 1000;
+    private static final int MAX_DESTINATION_LENGTH = 100;
+    private static final int MAX_CONDITION_LENGTH = 50;
+    private static final int MAX_SEPARATE_BLOCKS_LIMIT = 10;
     private static final List<GenerationJobStatus> ACTIVE_STATUSES =
             List.of(GenerationJobStatus.PENDING, GenerationJobStatus.RUNNING);
 
@@ -59,13 +62,7 @@ public class GenerationJobService {
         CreateGenerationJobRequest normalized = (request == null)
                 ? new CreateGenerationJobRequest(null, null)
                 : request;
-        String specialRequests = normalized.specialRequests();
-        if (specialRequests != null && specialRequests.length() > MAX_SPECIAL_REQUESTS_LENGTH) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "special_requests는 " + MAX_SPECIAL_REQUESTS_LENGTH + "자 이하여야 합니다."
-            );
-        }
+        validateRequest(normalized);
 
         if (generationJobRepository.existsByTripIdAndStatusIn(tripId, ACTIVE_STATUSES)) {
             throw new ResponseStatusException(
@@ -130,6 +127,50 @@ public class GenerationJobService {
                 .toList();
     }
 
+    private void validateRequest(CreateGenerationJobRequest request) {
+        String specialRequests = request.specialRequests();
+        if (specialRequests != null && specialRequests.length() > MAX_SPECIAL_REQUESTS_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "special_requests는 " + MAX_SPECIAL_REQUESTS_LENGTH + "자 이하여야 합니다."
+            );
+        }
+
+        validateOptionalText(request.destination(), "destination", MAX_DESTINATION_LENGTH);
+
+        CreateGenerationJobRequest.Conditions conditions = request.conditions();
+        if (conditions != null) {
+            validateOptionalText(conditions.companion(), "conditions.companion", MAX_CONDITION_LENGTH);
+            validateOptionalText(conditions.transport(), "conditions.transport", MAX_CONDITION_LENGTH);
+            validateOptionalText(conditions.budget(), "conditions.budget", MAX_CONDITION_LENGTH);
+            validateOptionalText(conditions.tempo(), "conditions.tempo", MAX_CONDITION_LENGTH);
+        }
+
+        CreateGenerationJobRequest.Options options = request.options();
+        if (options != null && options.maxSeparateBlocksPerDay() != null) {
+            int maxSeparate = options.maxSeparateBlocksPerDay();
+            if (maxSeparate < 0 || maxSeparate > MAX_SEPARATE_BLOCKS_LIMIT) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "max_separate_blocks_per_day는 0 이상 " + MAX_SEPARATE_BLOCKS_LIMIT + " 이하여야 합니다."
+                );
+            }
+        }
+    }
+
+    private void validateOptionalText(String value, String fieldName, int maxLength) {
+        if (value == null) {
+            return;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty() || trimmed.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + "는 1~" + maxLength + "자여야 합니다."
+            );
+        }
+    }
+
     private Trip findTripAndValidateParticipant(UUID tripId, UUID userId) {
         Trip trip = tripRepository.findById(tripId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "여행을 찾을 수 없습니다."));
@@ -158,7 +199,31 @@ public class GenerationJobService {
                 .toList());
         inputData.put("special_requests", request.specialRequests());
         inputData.put("include_budget_optimization", Boolean.TRUE.equals(request.includeBudgetOptimization()));
+        if (request.destination() != null) {
+            inputData.put("country_destination", request.destination().trim());
+        }
+        if (request.conditions() != null) {
+            Map<String, Object> conditionsMap = new LinkedHashMap<>();
+            putIfPresent(conditionsMap, "companion", request.conditions().companion());
+            putIfPresent(conditionsMap, "transport", request.conditions().transport());
+            putIfPresent(conditionsMap, "budget", request.conditions().budget());
+            putIfPresent(conditionsMap, "tempo", request.conditions().tempo());
+            if (!conditionsMap.isEmpty()) {
+                inputData.put("conditions", conditionsMap);
+            }
+        }
+        if (request.options() != null && request.options().maxSeparateBlocksPerDay() != null) {
+            inputData.put("options", Map.of(
+                    "max_separate_blocks_per_day", request.options().maxSeparateBlocksPerDay()
+            ));
+        }
         inputData.put("member_snapshots", snapshots);
         return inputData;
+    }
+
+    private void putIfPresent(Map<String, Object> target, String key, String value) {
+        if (value != null) {
+            target.put(key, value.trim());
+        }
     }
 }
