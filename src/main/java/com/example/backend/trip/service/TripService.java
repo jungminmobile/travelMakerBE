@@ -4,9 +4,7 @@ import com.example.backend.trip.domain.Trip;
 import com.example.backend.trip.domain.TripMember;
 import com.example.backend.trip.domain.TripMemberRole;
 import com.example.backend.trip.domain.TripMemberStatus;
-import com.example.backend.trip.dto.CreateTripRequest;
-import com.example.backend.trip.dto.CreateTripResponse;
-import com.example.backend.trip.dto.TripSummaryResponse;
+import com.example.backend.trip.dto.*;
 import com.example.backend.trip.repository.TripMemberRepository;
 import com.example.backend.trip.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -28,30 +27,12 @@ import java.util.stream.Collectors;
 public class TripService {
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+
     @Transactional
     public CreateTripResponse createTrip(UUID userId, CreateTripRequest request){
+        checkValidRequest(request.title(),request.destination(),request.startDate(),
+                request.endDate(), request.budget(),request.currency());
 
-
-        if(request.title() == null || request.destination() == null ||
-        request.startDate() == null || request.endDate() == null){
-            throw badRequest("입력값이 유효하지 않습니다.");
-        }
-
-        if(request.title().isBlank() || request.title().length() > 100) {
-            throw badRequest("제목은 공백 없이 100자 이하이여야 합니다.");
-        }
-        if(request.destination().isBlank() || request.destination().length() >255){
-            throw badRequest("장소는 공백 없이 255자 이하여야 합니다.");
-        }
-        if(request.startDate().isAfter(request.endDate())){
-            throw badRequest("도착 시간은 출발 시간보다 빠를순 없습니다.");
-        }
-        if(request.budget() != null &&request.budget()<0){
-            throw badRequest("예산은 음수값이 될 수 없습니다.");
-        }
-        if(request.currency() != null && request.currency().length() !=3){
-            throw badRequest("금융 약어는 3글자입니다.");
-        }
         Trip trip = Trip.builder().title(request.title()).destination(request.destination()).
                 startDate(request.startDate()).endDate(request.endDate()).budget(request.budget()).
                 currency(request.currency()).createdBy(userId).build();
@@ -66,6 +47,9 @@ public class TripService {
     private ResponseStatusException badRequest(String message){
         return new ResponseStatusException(HttpStatus.BAD_REQUEST,message);
     }
+
+
+
 
     public List<TripSummaryResponse> getMyTrips(UUID userId){
         List<TripMember> memberlists = tripMemberRepository.findAllByUserIdAndStatusWithTrip(userId, TripMemberStatus.ACTIVE);
@@ -85,5 +69,46 @@ public class TripService {
                         counts.getOrDefault(member.getTrip().getId(), 0L)
                 ))
                 .toList();
+    }
+
+    @Transactional
+    public UpdateTripResponse updateTrip(UUID tripId, UUID userId, UpdateTripRequest request){
+        if(!tripMemberRepository.existsByTripIdAndUserIdAndStatus(tripId,userId,TripMemberStatus.ACTIVE)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN," 해당 사용자는 여행에 가입되어 있지 않습니다.");
+        }
+        checkValidRequest(request.title(),request.destination(),request.startDate(),request.endDate(),
+                request.budget(), request.currency());
+
+        Trip trip = tripRepository.findById(tripId).orElseThrow(
+                ()->new ResponseStatusException(HttpStatus.NOT_FOUND,"해당 여행은 없습니다."));
+
+        trip.updateDetails(request.title(),request.destination(), request.startDate(),
+                request.endDate(), request.budget(), request.currency());
+
+        return UpdateTripResponse.from(trip);
+    }
+
+    private void checkValidRequest(String title, String destination, LocalDate startDate,
+                                   LocalDate endDate, Long budget, String currency){
+        if(title == null || destination == null ||
+                startDate == null || endDate == null){
+            throw badRequest("입력값이 유효하지 않습니다.");
+        }
+
+        if(title.isBlank() || title.length() > 100) {
+            throw badRequest("제목은 공백 없이 100자 이하이여야 합니다.");
+        }
+        if(destination.isBlank() || destination.length() >255){
+            throw badRequest("장소는 공백 없이 255자 이하여야 합니다.");
+        }
+        if(startDate.isAfter(endDate)){
+            throw badRequest("도착 시간은 출발 시간보다 빠를순 없습니다.");
+        }
+        if(budget != null &&budget<0){
+            throw badRequest("예산은 음수값이 될 수 없습니다.");
+        }
+        if(currency != null && currency.length() !=3){
+            throw badRequest("금융 약어는 3글자입니다.");
+        }
     }
 }
