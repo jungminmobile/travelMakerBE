@@ -1,5 +1,7 @@
 package com.example.backend.trip.service;
 
+import com.example.backend.preference.domain.UserPreferenceProfile;
+import com.example.backend.preference.repository.UserPreferenceProfileRepository;
 import com.example.backend.trip.domain.Trip;
 import com.example.backend.trip.domain.TripMember;
 import com.example.backend.trip.domain.TripMemberRole;
@@ -7,6 +9,8 @@ import com.example.backend.trip.domain.TripMemberStatus;
 import com.example.backend.trip.dto.*;
 import com.example.backend.trip.repository.TripMemberRepository;
 import com.example.backend.trip.repository.TripRepository;
+import com.example.backend.user.domain.User;
+import com.example.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -14,10 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,6 +28,8 @@ import java.util.stream.Collectors;
 public class TripService {
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final UserRepository userRepository;
+    private final UserPreferenceProfileRepository preferenceProfileRepository;
 
     @Transactional
     public CreateTripResponse createTrip(UUID userId, CreateTripRequest request){
@@ -47,9 +50,6 @@ public class TripService {
     private ResponseStatusException badRequest(String message){
         return new ResponseStatusException(HttpStatus.BAD_REQUEST,message);
     }
-
-
-
 
     public List<TripSummaryResponse> getMyTrips(UUID userId){
         List<TripMember> memberlists = tripMemberRepository.findAllByUserIdAndStatusWithTrip(userId, TripMemberStatus.ACTIVE);
@@ -111,4 +111,35 @@ public class TripService {
             throw badRequest("금융 약어는 3글자입니다.");
         }
     }
+
+
+    public TripDetailResponse getTripDetail(UUID tripId, UUID userId){
+        if(!tripMemberRepository.existsByTripIdAndUserIdAndStatus(tripId,userId,TripMemberStatus.ACTIVE)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"해당 여행의 멤버가 아닙니다.");
+        }
+
+        Trip trip = tripRepository.findById(tripId).
+                orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "일치하는 여행이 없습니다."));
+
+        List<TripMember> members = tripMemberRepository.findAllByTripIdAndStatus(tripId, TripMemberStatus.ACTIVE)
+                .stream()
+                .sorted(Comparator.comparing(TripMember::getJoinedAt))
+                .toList();
+
+        List<UUID> memberUserIds = members.stream().map(TripMember::getUserId).toList();
+
+        Map<UUID, User> userMap = userRepository.findAllById(memberUserIds).stream()
+                .collect(Collectors.toMap(User::getId,user->user));
+
+        Set<UUID> preferenceUserIds = preferenceProfileRepository.findAllByUserIdIn(memberUserIds).stream()
+                .map(UserPreferenceProfile::getUserId)
+                .collect(Collectors.toSet());
+        List<TripDetailResponse.TripDetailMemberResponse> memberResponses = members.stream()
+                .map(member -> TripDetailResponse.TripDetailMemberResponse.
+                        from(member, userMap.get(member.getUserId()),preferenceUserIds.contains(member.getUserId())))
+                .toList();
+
+        return TripDetailResponse.from(trip, memberResponses);
+    }
+
 }
