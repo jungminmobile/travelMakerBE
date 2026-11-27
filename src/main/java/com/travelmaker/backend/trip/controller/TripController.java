@@ -70,4 +70,12 @@ public class TripController {
     ){
         return ApiResponse.ok(tripService.getTripDetail(tripId,currentUser.userId()));
     }
+
+    @DeleteMapping("/{tripId}")
+    public ApiResponse<DeleteTripResponse> deleteTrip(
+            @PathVariable UUID tripId,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ){
+        return ApiResponse.ok(tripService.deleteTrip(tripId,currentUser.userId()));
+    }
 }
