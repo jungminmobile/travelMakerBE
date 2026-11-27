@@ -8,8 +8,12 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -54,10 +58,18 @@ public class ItineraryItem {
     @Column(name = "recommendation_reason", nullable = true, columnDefinition = "TEXT")
     private String recommendationReason;
 
+    @Column(name = "mode", nullable = true, length = 20)
+    private String mode;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "ai_metadata", nullable = true)
+    private Map<String, Object> aiMetadata;
+
     @Builder
     private ItineraryItem(ItineraryDay itineraryDay, Place place, String title, String description,
                           LocalTime startTime, LocalTime endTime, Integer displayOrder,
-                          Long estimatedCost, String recommendationReason){
+                          Long estimatedCost, String recommendationReason,
+                          String mode, Map<String, Object> aiMetadata){
         this.itineraryDay = Objects.requireNonNull(itineraryDay,"Not allow null");
         this.place = place;
         this.title = Objects.requireNonNull(title,"Not allow null");
@@ -67,6 +79,8 @@ public class ItineraryItem {
         this.displayOrder = Objects.requireNonNull(displayOrder,"Not allow null");
         this.estimatedCost = (estimatedCost == null) ? 0L : estimatedCost;
         this.recommendationReason = recommendationReason;
+        this.mode = mode;
+        this.aiMetadata = (aiMetadata == null) ? null : new LinkedHashMap<>(aiMetadata);
     }
 
     public void update(LocalTime startTime, LocalTime endTime, Integer displayOrder, Long estimatedCost){

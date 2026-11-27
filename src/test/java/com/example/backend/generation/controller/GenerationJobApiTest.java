@@ -4,14 +4,18 @@ import com.example.backend.auth.dto.FirebaseIdentity;
 import com.example.backend.auth.security.FirebaseTokenVerifier;
 import com.example.backend.generation.domain.GenerationJob;
 import com.example.backend.generation.domain.GenerationJobStatus;
+import com.example.backend.generation.domain.TripMemberSnapshot;
 import com.example.backend.generation.generator.ItineraryGenerator;
 import com.example.backend.generation.repository.GenerationJobRepository;
+import com.example.backend.generation.repository.TripMemberSnapshotRepository;
 import com.example.backend.itinerary.domain.Itinerary;
 import com.example.backend.itinerary.domain.ItineraryStatus;
 import com.example.backend.itinerary.repository.ItineraryDayRepository;
 import com.example.backend.itinerary.repository.ItineraryItemRepository;
 import com.example.backend.itinerary.repository.ItineraryRepository;
 import com.example.backend.place.repository.PlaceRepository;
+import com.example.backend.preference.domain.UserPreferenceProfile;
+import com.example.backend.preference.repository.UserPreferenceProfileRepository;
 import com.example.backend.trip.domain.Trip;
 import com.example.backend.trip.domain.TripMember;
 import com.example.backend.trip.domain.TripMemberRole;
@@ -39,6 +43,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -62,6 +67,8 @@ class GenerationJobApiTest {
     @Autowired private WebApplicationContext context;
     @Autowired private JsonMapper jsonMapper;
     @Autowired private GenerationJobRepository generationJobRepository;
+    @Autowired private TripMemberSnapshotRepository tripMemberSnapshotRepository;
+    @Autowired private UserPreferenceProfileRepository userPreferenceProfileRepository;
     @Autowired private ItineraryItemRepository itineraryItemRepository;
     @Autowired private ItineraryDayRepository itineraryDayRepository;
     @Autowired private ItineraryRepository itineraryRepository;
@@ -113,6 +120,8 @@ class GenerationJobApiTest {
         itineraryDayRepository.deleteAll();
         itineraryRepository.deleteAll();
         generationJobRepository.deleteAll();
+        tripMemberSnapshotRepository.deleteAll();
+        userPreferenceProfileRepository.deleteAll();
         tripMemberRepository.deleteAll();
         tripRepository.deleteAll();
         placeRepository.deleteAll();
@@ -425,5 +434,72 @@ class GenerationJobApiTest {
         mvc.perform(get("/api/v1/trips/{tripId}/generation-jobs/{jobId}", trip.getId(), otherJob.getId())
                         .header("Authorization", OWNER_AUTH))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("생성 요청 시 참여자 취향 프로파일이 백엔드 퀴즈 포맷으로 스냅샷 복제되며 이후 프로파일 변경에 영향받지 않는다")
+    void capturesImmutablePreferenceSnapshotsWithBackendQuizKeys() throws Exception {
+        Trip trip = saveTrip(LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 2));
+        saveMember(trip, memberUser.getId(), TripMemberRole.MEMBER, TripMemberStatus.ACTIVE);
+
+        UserPreferenceProfile ownerProfile = userPreferenceProfileRepository.saveAndFlush(UserPreferenceProfile.builder()
+                .userId(ownerUser.getId())
+                .profileData(Map.of(
+                        "quiz_version", "v1.0",
+                        "answers", List.of(Map.of(
+                                "question_key", "q_food",
+                                "selected_option_keys", List.of("ramen", "sushi")
+                        )),
+                        "selected_tags", List.of("ramen", "sushi")
+                ))
+                .modelName("rule-based-v1")
+                .build());
+
+        MvcResult postResult = mvc.perform(post("/api/v1/trips/{tripId}/generation-jobs", trip.getId())
+                        .header("Authorization", OWNER_AUTH))
+                .andExpect(status().isAccepted())
+                .andReturn();
+
+        UUID jobId = extractJobId(postResult);
+        waitForTerminalStatus(jobId);
+
+        // 이후 원 프로파일을 수정해도 이미 복제된 스냅샷과 job.input_data는 유지되어야 한다.
+        ownerProfile.update(Map.of(
+                "quiz_version", "v2.0",
+                "answers", List.of(Map.of(
+                        "question_key", "q_food",
+                        "selected_option_keys", List.of("bakery")
+                )),
+                "selected_tags", List.of("bakery")
+        ), "rule-based-v1");
+        userPreferenceProfileRepository.saveAndFlush(ownerProfile);
+
+        List<TripMemberSnapshot> snapshots = tripMemberSnapshotRepository.findByTripIdOrderByCreatedAtDesc(trip.getId());
+        assertThat(snapshots).hasSize(2);
+        TripMemberSnapshot ownerSnapshot = snapshots.stream()
+                .filter(s -> s.getUserId().equals(ownerUser.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(ownerSnapshot.getSourceProfileVersion()).isEqualTo(1);
+        assertThat(ownerSnapshot.getProfileSnapshot())
+                .containsEntry("quiz_version", "v1.0")
+                .containsEntry("has_preference", true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> quizSelections =
+                (Map<String, Object>) ownerSnapshot.getProfileSnapshot().get("quiz_selections");
+        assertThat(quizSelections).containsEntry("q_food", List.of("ramen", "sushi"));
+    }
+
+    @Test
+    @DisplayName("options.max_separate_blocks_per_day가 범위를 벗어나면 400 Bad Request를 반환한다")
+    void invalidMaxSeparateBlocksIs400() throws Exception {
+        Trip trip = saveTrip(LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 2));
+
+        mvc.perform(post("/api/v1/trips/{tripId}/generation-jobs", trip.getId())
+                        .header("Authorization", OWNER_AUTH)
+                        .contentType("application/json")
+                        .content("{\"options\":{\"max_separate_blocks_per_day\":-1}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
     }
 }

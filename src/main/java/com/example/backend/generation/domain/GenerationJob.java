@@ -60,6 +60,12 @@ public class GenerationJob {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "error_code", length = 64)
+    private String errorCode;
+
+    @Column(name = "retryable")
+    private Boolean retryable;
+
     @Column(name = "started_at")
     private Instant startedAt;
 
@@ -120,14 +126,25 @@ public class GenerationJob {
         this.progressPercent = 100;
         this.resultData = (resultData == null) ? null : new LinkedHashMap<>(resultData);
         this.errorMessage = null;
+        this.errorCode = null;
+        this.retryable = null;
     }
 
     /**
      * 실패 사유를 기록하고 실패 상태로 전환합니다.
      */
     public void fail(String errorMessage, Instant completedAt) {
+        fail(errorMessage, null, null, completedAt);
+    }
+
+    /**
+     * 실패 사유, 오류 코드, 재시도 가능 여부를 기록하고 실패 상태로 전환합니다.
+     */
+    public void fail(String errorMessage, String errorCode, Boolean retryable, Instant completedAt) {
         this.completedAt = Objects.requireNonNull(completedAt, "completedAt must not be null");
         this.status = GenerationJobStatus.FAILED;
         this.errorMessage = errorMessage;
+        this.errorCode = errorCode;
+        this.retryable = retryable;
     }
 }
