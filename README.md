@@ -41,7 +41,7 @@ docker compose up -d
 ```
 
 **IntelliJ IDEA**
-1. 실행 구성(`BackendApplication`) → **Edit Configurations...**
+1. 실행 구성(`TravelMakerApplication`) → **Edit Configurations...**
 2. **Active profiles**에 `local` 입력 후 실행
 
 ## 테스트 실행
