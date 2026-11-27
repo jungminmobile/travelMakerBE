@@ -1,4 +1,4 @@
-# travelMaker 백엔드 (CLAUDE.md)
+# Travel Maker 백엔드 (CLAUDE.md)
 
 이 파일은 개발 중 항상 지켜야 할 목표, MVP 범위, 규칙을 담는다. 작업 전에 먼저 읽는다.
 
@@ -52,7 +52,7 @@ MVP는 아래 5단계 흐름이 처음부터 끝까지 한 번 동작하는 것�
 
 - Java 17, Spring Boot 4.1.2, Gradle
 - 운영 DB는 PostgreSQL, 테스트 DB는 H2. MySQL은 쓰지 않는다.
-- 패키지: `com.example.backend` 아래 `entity`, `repository`
+- 패키지: `com.travelmaker.backend` 아래 `entity`, `repository`
 
 ## 6. DB 모델링 규칙 (Notion 모델링 문서 기준)
 
@@ -72,7 +72,7 @@ MVP는 아래 5단계 흐름이 처음부터 끝까지 한 번 동작하는 것�
 - PK는 `@Id` + `@GeneratedValue(strategy = GenerationType.UUID)`
 - 시각은 `Instant`로 쓴다. `OffsetDateTime`은 JPA Auditing이 지원하지 않아 쓰지 않는다.
 - 생성·수정 시각은 `@CreatedDate` / `@LastModifiedDate` + `@EntityListeners(AuditingEntityListener.class)`
-  - `@EnableJpaAuditing`은 `BackendApplication`에 한 번만 둔다.
+  - `@EnableJpaAuditing`은 `TravelMakerApplication`에 한 번만 둔다.
 - `@NoArgsConstructor(access = PROTECTED)`, `@Getter`를 쓰고 `@Setter`는 쓰지 않는다.
 - 생성자는 id와 시각을 받지 않는다. 이 값은 JPA가 채운다.
 - 제약은 `@Column(nullable, unique, length)`로 명시한다.
