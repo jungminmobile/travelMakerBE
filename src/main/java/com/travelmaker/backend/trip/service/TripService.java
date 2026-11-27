@@ -2,10 +2,7 @@ package com.travelmaker.backend.trip.service;
 
 import com.travelmaker.backend.preference.domain.UserPreferenceProfile;
 import com.travelmaker.backend.preference.repository.UserPreferenceProfileRepository;
-import com.travelmaker.backend.trip.domain.Trip;
-import com.travelmaker.backend.trip.domain.TripMember;
-import com.travelmaker.backend.trip.domain.TripMemberRole;
-import com.travelmaker.backend.trip.domain.TripMemberStatus;
+import com.travelmaker.backend.trip.domain.*;
 import com.travelmaker.backend.trip.dto.*;
 import com.travelmaker.backend.trip.repository.TripMemberRepository;
 import com.travelmaker.backend.trip.repository.TripRepository;
@@ -52,7 +49,9 @@ public class TripService {
     }
 
     public List<TripSummaryResponse> getMyTrips(UUID userId){
-        List<TripMember> memberlists = tripMemberRepository.findAllByUserIdAndStatusWithTrip(userId, TripMemberStatus.ACTIVE);
+        List<TripMember> memberlists = tripMemberRepository.findAllByUserIdAndStatusWithTrip(userId, TripMemberStatus.ACTIVE)
+                .stream().filter(member -> member.getTrip().getStatus() != TripStatus.CANCELED)
+                .toList();
 
         if(memberlists.isEmpty()){
             return Collections.emptyList();
@@ -121,6 +120,10 @@ public class TripService {
         Trip trip = tripRepository.findById(tripId).
                 orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "일치하는 여행이 없습니다."));
 
+        if(trip.getStatus() == TripStatus.CANCELED){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"일치하는 여행이 없습니다.");
+        }
+
         List<TripMember> members = tripMemberRepository.findAllByTripIdAndStatus(tripId, TripMemberStatus.ACTIVE)
                 .stream()
                 .sorted(Comparator.comparing(TripMember::getJoinedAt))
@@ -142,4 +145,24 @@ public class TripService {
         return TripDetailResponse.from(trip, memberResponses);
     }
 
+    @Transactional
+    public DeleteTripResponse deleteTrip(UUID tripId, UUID userId){
+        TripMember tripMember = tripMemberRepository.findByTripIdAndUserId(tripId,userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,"해당 여행의 멤버가 아닙니다."));
+
+        if(tripMember.getRole() != TripMemberRole.OWNER){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"여행 삭제는 소유자만이 가능합니다.");
+        }
+
+        Trip trip = tripRepository.findById(tripId).
+                orElseThrow(() ->new ResponseStatusException(HttpStatus.NOT_FOUND,"일치하는 여행이 없습니다."));
+
+        if(trip.getStatus() == TripStatus.CANCELED){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"일치하는 여행이 없습니다.");
+        }
+
+        trip.changeStatus(TripStatus.CANCELED);
+
+        return DeleteTripResponse.from(trip);
+    }
 }
