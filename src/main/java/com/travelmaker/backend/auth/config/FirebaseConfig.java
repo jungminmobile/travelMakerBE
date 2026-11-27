@@ -12,6 +12,8 @@ import java.io.IOException;
 
 @Configuration
 public class FirebaseConfig {
+    private static final String APP_NAME = "travel-maker-auth";
+
     @Bean
     @Lazy
     public FirebaseAuth firebaseAuth(@Value("${app.firebase.project-id}") String projectId)
@@ -20,7 +22,10 @@ public class FirebaseConfig {
                 .setCredentials(GoogleCredentials.getApplicationDefault())
                 .setProjectId(projectId)
                 .build();
-        FirebaseApp app = FirebaseApp.initializeApp(options, "travel-maker-auth");
+        FirebaseApp app = FirebaseApp.getApps().stream()
+                .filter(existing -> APP_NAME.equals(existing.getName()))
+                .findFirst()
+                .orElseGet(() -> FirebaseApp.initializeApp(options, APP_NAME));
         return FirebaseAuth.getInstance(app);
     }
 }

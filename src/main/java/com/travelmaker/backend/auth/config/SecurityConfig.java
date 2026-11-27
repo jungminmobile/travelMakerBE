@@ -16,6 +16,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -26,7 +27,11 @@ public class SecurityConfig {
                                                    @Value("${app.cors.allowed-origin:http://localhost:5173}") String allowedOrigin)
             throws Exception {
         CorsConfiguration cors = new CorsConfiguration();
-        cors.setAllowedOrigins(List.of(allowedOrigin));
+        List<String> origins = Arrays.stream(allowedOrigin.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        cors.setAllowedOrigins(origins);
         cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
