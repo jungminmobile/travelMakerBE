@@ -95,12 +95,14 @@ docker compose up -d
 - **Artifact Registry 저장소**: `asia-northeast3` 리전에 Docker 저장소 `travel-maker` 생성
 - **Secret Manager**: Supabase DB 비밀번호를 시크릿(기본 이름 `travel-maker-db-password`)으로 등록
 - **Workload Identity Federation & IAM**:
-  - `jungminmobile/travelMakerBE`의 `release` 브랜치를 허용하는 Workload Identity Pool/Provider 생성 및 배포용 서비스 계정에 연결
+  - `jungminmobile/travelMakerBE`의 `release` 브랜치를 허용하는 Workload Identity Pool/Provider 생성 및 배포용 서비스 계정에 연결 (`attribute.repository == 'jungminmobile/travelMakerBE'` 및 `refs/heads/release` 조건 권장)
   - 배포용 서비스 계정 권한: `roles/run.admin`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`
   - Cloud Run 런타임 서비스 계정 권한: `roles/secretmanager.secretAccessor`, `roles/firebaseauth.viewer`
 - **Firebase Auth**: Firebase Console → Authentication → Settings → Authorized domains에 운영 프론트엔드 도메인 등록
 
-#### GitHub `production` Environment 설정
+#### GitHub Repository `Secrets and variables → Actions` 설정
+
+Repository **Settings → Secrets and variables → Actions**에 아래 값을 등록합니다.
 
 | 구분 | 이름 | 설명 |
 | --- | --- | --- |
